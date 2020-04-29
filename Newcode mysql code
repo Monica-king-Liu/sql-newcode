@@ -1,0 +1,1078 @@
+#Newcode sql exercises are finished by mysql.
+#The difference of mysql and online sql is marked.
+#本文所用代码在mysql 8中可ac;
+#用不同方法对比mysql与sqlite的差异
+#***代表结构复杂度
+
+#sql在线编程测试，查找musql与websql使用方法的不同
+#注意mysql group by 的不同：https://blog.csdn.net/john_hongming/article/details/42742965
+#每个未在GROUP BY中命名的非聚合列中的所有值对于每个组都是相同的。mysql可以自由选择每组中的任何值，
+#因此除非它们相同，否则所选值不确定。 你的方法一，依旧存在这个问题，数据量一旦大的话，
+#出来的查询结果就不一样
+
+SHOW databases;
+USE test;
+#1、查找最晚入职员工的所有信息
+#方法一：排序
+select * 
+from employees
+order by hire_date DESC
+limit 1;
+#方法二：选出最晚入职员工
+select * 
+from employees
+where hire_date = (select max(hire_date) from employees);
+
+#查找入职员工时间排名倒数第三的员工所有信息
+#方法一：limit
+SELECT * FROM employees
+ORDER BY hire_date desc
+limit 2,1;
+
+#方法二：直接选出倒数第三晚的入职时间
+select * 
+from employees as e1
+where  (select count(hire_date) from employees as e2 where e2.hire_date > e1.hire_date) = 2;
+
+#3、查找各个部门当前(to_date='9999-01-01')领导当前薪水详情以及其对应部门编号
+#考察 inner join
+select salaries.*,dept_manager.dept_no
+from salaries , dept_manager
+where dept_manager.emp_no = salaries.emp_no
+and salaries.to_date = '9999-01-01'
+and dept_manager.to_date = '9999-01-01';
+
+#或者在inner join 中联结日期
+select salaries.*,dept_manager.dept_no
+from salaries inner join dept_manager
+on dept_manager.emp_no = salaries.emp_no
+and dept_manager.to_date = salaries.to_date
+and salaries.to_date = '9999-01-01';
+
+#4、 查找所有已经分配部门的员工的last_name和first_name以及dept_no
+select last_name,first_name,dept_emp.dept_no
+from dept_emp inner join employees
+on dept_emp.emp_no = employees.emp_no;
+
+#方法二：判断员工号在dept_emp中：
+#注意：in 只能选出一列
+select last_name,first_name,dept_emp.dept_no
+from employees  inner join dept_emp
+on dept_emp.emp_no = employees.emp_no
+where employees.emp_no in (select emp_no from dept_emp);
+
+#5、查找所有员工的last_name和first_name以及对应部门编号dept_no，也包括展示没有分配具体部门的员工
+#考察外联结： left outer join
+select employees.last_name,employees.first_name,dept_emp.dept_no
+from employees left outer join dept_emp
+on employees.emp_no = dept_emp.emp_no ;
+
+#6、查找所有员工入职时候的薪水情况，给出emp_no以及salary， 并按照emp_no进行逆序
+select employees.emp_no,salaries.salary
+from employees inner join salaries
+on employees.emp_no = salaries.emp_no
+where employees.hire_date=salaries.from_date
+order by employees.emp_no desc;
+
+#7、查找薪水涨幅超过15次的员工号emp_no以及其对应的涨幅次数t
+#emp_no出现的次数就是涨幅数
+select emp_no,count(*) as t
+from salaries
+group by emp_no
+having count(*)>15;
+
+#8、找出所有员工当前(to_date='9999-01-01')具体的薪水salary情况
+#对于相同的薪水只显示一次,并按照逆序显示
+#考察distinct
+select distinct salary
+from salaries
+where to_date='9999-01-01'
+order by salary desc;
+
+#9、获取所有部门当前manager的当前薪水情况，给出dept_no, emp_no以及salary，当前表示to_date='9999-01-01'
+SELECT dept_manager.dept_no,dept_manager.emp_no,salaries.salary
+from dept_manager, salaries
+where dept_manager.emp_no = salaries.emp_no
+and salaries.to_date ='9999-01-01'
+and dept_manager.to_date ='9999-01-01';
+
+#10、获取所有非manager的员工emp_no
+SELECT emp_no FROM employees
+WHERE emp_no NOT IN (SELECT emp_no FROM dept_manager);
+#利用外联结
+SELECT employees.emp_no
+FROM employees left outer join dept_manager
+on dept_manager.emp_no = employees.emp_no
+where dept_manager.emp_no is null;
+
+#11、获取所有员工当前的manager，如果当前的manager是自己的话结果不显示，当前表示to_date='9999-01-01'。
+#结果第一列给出当前员工的emp_no,第二列给出其manager对应的manager_no。
+#表述一
+select dept_emp.emp_no,dept_manager.emp_no as manager_no
+from dept_emp inner join dept_manager
+on dept_emp.dept_no = dept_manager.dept_no
+WHere dept_manager.emp_no <> dept_emp.emp_no
+and dept_emp.to_date = '9999-01-01'
+and dept_manager.to_date = '9999-01-01';
+#表述二
+select dept_emp.emp_no,dept_manager.emp_no as manager_no
+from dept_emp inner join dept_manager
+on dept_emp.dept_no = dept_manager.dept_no
+WHere dept_emp.emp_no not in (select emp_no from dept_manager where to_date = '9999-01-01') 
+and dept_emp.to_date = '9999-01-01'
+and dept_manager.to_date = '9999-01-01';
+
+#12、获取所有部门中当前员工薪水最高的相关信息，给出dept_no, emp_no以及其对应的salary
+#mysql group by 语句错误？？？？？？
+use test;
+#输出偏多,加条件:e.dept_no = e2.dept_no
+select e2.dept_no, e2.emp_no,s2.salary
+from salaries as s2 inner join dept_emp as e2
+on s2.emp_no = e2.emp_no
+where s2.to_date='9999-01-01'
+and e2.to_date='9999-01-01'
+and salary in (select max(s.salary) 
+from salaries as s inner join dept_emp as e
+on s.emp_no = e.emp_no
+where s.to_date='9999-01-01'
+and e.to_date='9999-01-01'
+ and e.dept_no = e2.dept_no
+group by dept_no);
+
+#answer:
+select de.dept_no, de.emp_no, s.salary
+from dept_emp de inner join salaries s
+on de.emp_no = s.emp_no
+and de.to_date = '9999-01-01'
+and s.to_date = '9999-01-01'
+where s.salary = (select max(s2.salary)
+              from dept_emp de2 inner join salaries s2
+              on de2.emp_no = s2.emp_no
+              and de2.to_date = '9999-01-01'
+              and s2.to_date = '9999-01-01'
+              where de2.dept_no = de.dept_no
+              group by de2.dept_no)
+order by de.dept_no;
+
+select max(salary)
+              from dept_emp de inner join salaries s
+              on de.emp_no = s.emp_no
+              and de.to_date = '9999-01-01'
+              and s.to_date = '9999-01-01'
+              group by de.dept_no;
+
+#方法2：
+select d.dept_no,d.emp_no,s.salary
+from dept_emp as d,salaries as s,(select e.dept_no as dept_no,max(s.salary) as salary
+from salaries as s inner join dept_emp as e
+on s.emp_no = e.emp_no
+where s.to_date='9999-01-01'
+and e.to_date='9999-01-01'
+group by dept_no) as ds
+where s.emp_no = d.emp_no
+and d.dept_no = ds.dept_no
+and s.salary = ds.salary
+and d.to_date='9999-01-01'
+and s.to_date='9999-01-01'
+order by d.dept_no;
+
+#错误：输出的dept_no是随机的，不是最大薪水对应的员工
+select e.dept_no as dept_no,max(s.salary) as salary
+from salaries as s inner join dept_emp as e
+on s.emp_no = e.emp_no
+where s.to_date='9999-01-01'
+and e.to_date='9999-01-01'
+group by dept_no;
+
+#可以，部门与薪水是对应关系
+select dept_no,max(salary)
+from dept_emp d
+inner join salaries s
+on d.emp_no = s.emp_no
+and d.to_date = s.to_date
+where s.to_date='9999-01-01'
+group by dept_no;
+
+#13、从titles表获取按照title进行分组，每组个数大于等于2，给出title以及对应的数目t。
+#考察count(*)
+select title,count(*) as t
+from titles
+group by title
+having t >= 2;
+
+#14、从titles表获取按照title进行分组，每组个数大于等于2，给出title以及对应的数目t。
+#注意对于重复的emp_no进行忽略。
+#考察count(distinct )
+select title,count(distinct emp_no) as t
+from titles
+group by title
+having t >= 2;
+
+#15、查找employees表所有emp_no为奇数，且last_name不为Mary的员工信息，并按照hire_date逆序排列
+#取余：emp_no%2 = 1； 10 MOD 4; 不等于：！=；<>
+select *
+from employees
+where emp_no mod 2 = 1
+and last_name <> 'Mary'
+order by hire_date desc;
+
+#16、统计出当前各个title类型对应的员工当前（to_date='9999-01-01'）薪水对应的平均工资。
+#结果给出title以及平均工资avg。
+#avg()
+SELECT titles.title,avg (salaries.salary) as avg
+FROM titles inner join salaries
+on titles.emp_no = salaries.emp_no
+where titles.to_date='9999-01-01'
+and salaries.to_date='9999-01-01'
+group by titles.title;
+
+#17、获取当前（to_date='9999-01-01'）薪水第二多的员工的emp_no以及其对应的薪水salary
+#薪水第二多：
+#group by 语句无法运行？？？？？？（mysql无法返回与max对应的行）
+#?????????????????websql可以
+select emp_no,max(salary)
+from salaries;
+
+select emp_no,salary
+from salaries
+where salary =(select max(salary)
+from salaries
+where salary < (select max(salary) from salaries where to_date = '9999-01-01')
+and to_date = '9999-01-01')
+and to_date = '9999-01-01';
+
+select max(salary)
+from salaries
+where salary < (select max(salary) from salaries where to_date = '9999-01-01')
+and to_date = '9999-01-01';
+
+#薪水第二多要考虑薪水第一多有多人情况：
+select emp_no,salary
+from salaries
+where salary =(select distinct salary
+from salaries
+where to_date = '9999-01-01'
+order by salary desc
+limit 1,1)
+and to_date = '9999-01-01';
+
+#18、查找当前薪水(to_date='9999-01-01')排名第二多的员工编号emp_no、薪水salary、last_name以及first_name
+#方法一：
+select e.emp_no,s1.salary,e.last_name,e.first_name
+from salaries as s1 inner join employees as e 
+on s1.emp_no = e.emp_no
+where s1.to_date = '9999-01-01'
+and (select count( s2.salary) from salaries as s2 where s2.salary >s1.salary  
+and s2.to_date = '9999-01-01') = 1;
+
+select emp_no,salary
+from salaries
+where to_date = '9999-01-01'
+order by salary desc;
+
+#方法二：
+#mysql 运行不出，需要group by ？？？？？？？(与上题同理)
+select e.emp_no, max(s.salary) as salary,e.last_name,e.first_name
+from salaries as s inner join employees as e
+on s.emp_no = e.emp_no
+where s.to_date='9999-01-01'
+and s.salary not in  (select max(salary) from salaries where to_date='9999-01-01');
+
+#方法三：
+select e.emp_no, s.salary,e.last_name,e.first_name
+from salaries as s inner join employees as e
+on s.emp_no = e.emp_no
+where s.to_date='9999-01-01'
+and s.salary =(select max(salary)
+from salaries
+where salary < (select max(salary) from salaries where to_date = '9999-01-01')
+and to_date = '9999-01-01');
+
+#19、查找所有员工的last_name和first_name以及对应的dept_name，也包括暂时没有分配部门的员工
+select employees.last_name,employees.first_name,departments.dept_name
+from employees left outer join dept_emp
+on employees.emp_no = dept_emp.emp_no
+left outer join departments
+on dept_emp.dept_no = departments.dept_no;
+
+SELECT dept_emp.dept_no,dept_emp.emp_no,salaries.salary
+from dept_emp,salaries
+where dept_emp.emp_no = salaries.emp_no
+order by salaries.to_date desc,salaries.salary desc;
+
+#20、（****）查找员工编号emp_no为10001其自入职以来的薪水salary涨幅值growth
+#当前薪水
+select salary  
+from salaries 
+where to_date = (select max(to_date) from salaries where emp_no = 10001)
+and emp_no = 10001;
+#入职薪水
+select salary  
+from salaries 
+where from_date = (select min(from_date) from salaries where emp_no = 10001)
+and emp_no = 10001;
+#涨幅：
+select s1.salary - s2.salary as growth
+from salaries as s1,salaries as s2
+where s1.salary = (select salary  
+from salaries 
+where to_date = (select max(to_date) from salaries where emp_no = 10001)
+and emp_no = 10001)
+and s2.salary = (select salary  
+from salaries 
+where from_date = (select min(from_date) from salaries where emp_no = 10001)
+and emp_no = 10001);
+#涨幅：运行不出？？？？？？？:与17题同理
+#Websql 可以运行出来
+SELECT
+    b.salary - a.salary growth
+FROM
+    ( SELECT salary, min( to_date ) FROM salaries WHERE emp_no = 10001 ) a,
+    ( SELECT salary, max( to_date ) FROM salaries WHERE emp_no = 10001 ) b;
+    
+#21、（*****）查找所有员工自入职以来的薪水涨幅情况，
+#给出员工编号emp_no以及其对应的薪水涨幅growth，并按照growth进行升序
+select emp_no,(select salary  
+from salaries 
+where from_date = (select max(from_date) from salaries ))
+from salaries 
+group by emp_no;
+
+#当前员工薪水涨幅:
+select emp_no,salary,max(to_date)
+from salaries 
+group by emp_no;
+
+#入职薪水
+select salaries.emp_no, salaries.salary as s1 
+from salaries,employees
+where salaries.emp_no = employees.emp_no
+and salaries.from_date = employees.hire_date;
+#当前薪水
+select salaries.emp_no,salaries.salary as s2 
+from salaries,employees
+where salaries.emp_no = employees.emp_no
+and salaries.to_date = '9999-01-01';
+#如若不知当前时间，查找最大薪水
+select salaries.emp_no,salaries.salary  
+from salaries,employees
+where salaries.emp_no = employees.emp_no
+and  salaries.to_date in (select max(to_date)
+from salaries as s2
+where s2.emp_no = salaries.emp_no
+group by emp_no);
+
+select emp_no,max(to_date)
+from salaries 
+group by emp_no;
+#涨幅：
+select hs.emp_no, ns.s2-hs.s1 as growth
+from (select salaries.emp_no, salaries.salary as s1 
+from salaries,employees
+where salaries.emp_no = employees.emp_no
+and salaries.from_date = employees.hire_date) as hs inner join 
+(select salaries.emp_no,salaries.salary as s2 
+from salaries,employees
+where salaries.emp_no = employees.emp_no
+and salaries.to_date = '9999-01-01') as ns
+on hs.emp_no = ns.emp_no
+order by growth;
+#简便版：
+select a.emp_no, (b.salary - c.salary) as growth
+from
+    employees as a
+    inner join salaries as b
+    on a.emp_no = b.emp_no and b.to_date = '9999-01-01'
+    inner join salaries as c
+    on a.emp_no = c.emp_no and a.hire_date = c.from_date
+order by growth ;
+
+select a.emp_no, (b.salary - c.salary) as growth
+from
+    employees as a
+    inner join salaries as b
+    on a.emp_no = b.emp_no and b.to_date in (select max(to_date)
+from salaries as s2
+where s2.emp_no = b.emp_no
+group by emp_no)
+    inner join salaries as c
+    on a.emp_no = c.emp_no and a.hire_date = c.from_date
+order by growth ;
+
+ #22、（****）统计部门薪水次数：统计各个部门的工资记录数，给出部门编码dept_no、部门名称dept_name以及次数sum
+ #这个group by 可以用？？？？:因为group by的dept_emp.dept_no
+#先联结两个表：
+select dept_emp.dept_no,count(dept_emp.emp_no)
+from salaries, dept_emp
+where  salaries.emp_no = dept_emp.emp_no
+group by dept_emp.dept_no;
+#三个表：
+select dept_emp.dept_no,departments.dept_name,count(dept_emp.dept_no) as sum
+from departments,salaries, dept_emp
+where departments.dept_no = dept_emp.dept_no
+and salaries.emp_no = dept_emp.emp_no
+group by dept_emp.dept_no;
+#内连接三个表
+select a.dept_no,d.dept_name,count(s.salary) as sum
+from  dept_emp as a
+inner join salaries as s
+on s.emp_no = a.emp_no
+inner join departments as d
+on d.dept_no = a.dept_no
+group by a.dept_no;
+#内连接三个表
+SELECT de.dept_no, dp.dept_name, COUNT(s.salary) AS sum 
+FROM (dept_emp AS de INNER JOIN salaries AS s ON de.emp_no = s.emp_no) 
+INNER JOIN departments AS dp ON de.dept_no = dp.dept_no 
+GROUP BY de.dept_no;
+
+#23、（*****）对所有员工的当前(to_date='9999-01-01')薪水按照salary进行按照1-N的排名，
+#相同salary并列且按照emp_no升序排列
+#但由于94409重复，利用COUNT(DISTINCT s2.salary)去重可得工资为94409的rank等于2
+###mysql rank 怎么用？？？？
+select s1.emp_no,s1.salary,(select count(distinct s2.salary) from salaries as s2 where s2.salary > s1.salary and s2.to_date='9999-01-01' )+1 as ran
+from salaries as s1
+where s1.to_date='9999-01-01'
+order by ran,emp_no;
+
+##？？？？？语句错误可以运行出来？？？？？？？？ 因为后面，salary，count（salary）为emp_no别名
+select  emp_no ，salary，count（salary）
+from salaries
+where to_date = '9999-01-01'
+order by salary desc;
+
+#使用group by 错误：？？？？？？？？？？？
+#webssql可以
+select  a.emp_no ,a.salary,
+count(distinct b.salary) 
+from salaries as a,salaries as b 
+where a.to_date = '9999-01-01' 
+and b.to_date ='9999-01-01' 
+and a.salary<= b.salary 
+group by a.emp_no 
+order by a.salary desc,a.emp_no asc;
+
+#24、获取所有非manager员工当前的薪水情况，给出dept_no、emp_no以及salary ，当前表示to_date='9999-01-01'
+select dept_emp.dept_no,employees.emp_no,salaries.salary
+from dept_emp,dept_manager,employees,salaries
+where dept_emp.dept_no = dept_manager.dept_no
+and dept_emp.emp_no = employees.emp_no
+and employees.emp_no = salaries.emp_no
+and employees.emp_no not in (select emp_no from dept_manager where to_date ='9999-01-01')
+and salaries.to_date = '9999-01-01';
+
+#25、（****）获取员工其当前的薪水比其manager当前薪水还高的相关信息，当前表示to_date='9999-01-01'
+#结果第一列给出员工的emp_no，manager的manager_no，员工当前的薪水emp_salary,manager当前的薪水manager_salary
+#部门经理的薪水：
+select m.dept_no,m.emp_no,s.salary
+from dept_manager m inner join salaries s
+on m.emp_no = s.emp_no
+where m.to_date= '9999-01-01'
+and s.to_date= '9999-01-01';
+#非经理薪水
+select d.dept_no,d.emp_no,s.salary
+from dept_emp d inner join salaries s
+on d.emp_no = s.emp_no
+where s.to_date= '9999-01-01'
+and d.to_date= '9999-01-01'
+and d.emp_no not in (select emp_no from dept_manager where to_date ='9999-01-01');
+#普通员工薪水
+select  de.dept_no,de.emp_no,s2.salary
+from dept_emp as de inner join salaries as s2
+on de.emp_no = s2.emp_no
+where de.to_date = '9999-01-01'
+and s2.to_date = '9999-01-01';
+
+
+select es.emp_no,es.salary,ms.emp_no,ms.salary
+from (select m.dept_no,m.emp_no,s.salary
+from dept_manager m inner join salaries s
+on m.emp_no = s.emp_no
+where m.to_date= '9999-01-01'
+and s.to_date= '9999-01-01') as ms
+inner join (select de.dept_no,de.emp_no,s2.salary
+from dept_emp as de inner join salaries as s2
+on de.emp_no = s2.emp_no
+where de.to_date = '9999-01-01'
+and s2.to_date = '9999-01-01') as es
+on ms.dept_no = es.dept_no
+where ms.emp_no <> es.emp_no
+and es.salary>ms.salary;
+
+
+select emsa.emp_no,emsa.salary as emp_salary,masa.emp_no as manager_no,masa.salary as manager_salary
+from (select d.dept_no,d.emp_no,s.salary
+from dept_emp d inner join salaries s
+on d.emp_no = s.emp_no
+where s.to_date= '9999-01-01'
+and d.to_date= '9999-01-01'
+and d.emp_no not in (select emp_no from dept_manager where to_date ='9999-01-01')) as emsa inner join
+(select m.dept_no,m.emp_no,s.salary
+from dept_manager m inner join salaries s
+on m.emp_no = s.emp_no
+where m.to_date= '9999-01-01'
+and s.to_date= '9999-01-01') as masa
+on emsa.dept_no =  masa.dept_no
+where emsa.salary > masa.salary;
+
+#方法二：
+ SELECT de.emp_no,dm.emp_no manager_no,
+sa.salary emp_salary,sal.salary manager_salary
+FROM dept_emp de,salaries sa,dept_manager dm,salaries sal
+WHERE de.emp_no=sa.emp_no
+AND dm.emp_no=sal.emp_no
+AND de.dept_no=dm.dept_no
+AND de.to_date='9999-01-01'
+AND sa.to_date='9999-01-01'
+AND dm.to_date='9999-01-01'
+AND sal.to_date='9999-01-01'
+AND sa.salary>sal.salary;
+
+#26、（****）汇总各个部门当前员工的title类型的分配数目，结果给出部门编号dept_no、dept_name、
+#其当前员工所有的title以及该类型title对应的数目count
+#answer
+select dept_emp.dept_no,departments.dept_name,titles.title,count(titles.title) as count
+from dept_emp inner join titles
+on dept_emp.emp_no = titles.emp_no 
+inner join departments
+on departments.dept_no = dept_emp.dept_no
+where titles.to_date = '9999-01-01'
+and dept_emp.to_date = '9999-01-01'
+group by dept_emp.dept_no,titles.title
+order by dept_emp.dept_no;
+
+#先给出dept_no,title,count;出现重复输出？？？？
+#如何删除重复行？
+select d1.dept_no,t1.title,
+(select count(*) from dept_emp as d2 inner join titles as  t2
+on d2.emp_no = t2.emp_no 
+where t2.to_date = '9999-01-01'
+and d2.to_date = '9999-01-01' 
+and  d2.dept_no = d1.dept_no
+and t2.title=t1.title) as count
+from dept_emp as d1 inner join titles as  t1
+on d1.emp_no = t1.emp_no 
+where t1.to_date = '9999-01-01'
+and d1.to_date = '9999-01-01'
+order by d1.dept_no;
+
+select d1.dept_no,t1.title,
+ count(t1.title) as count
+from dept_emp as d1 inner join titles as  t1
+on d1.emp_no = t1.emp_no 
+where t1.to_date = '9999-01-01'
+and d1.to_date = '9999-01-01'
+GROUP BY  d1.dept_no,t1.title
+order by d1.dept_no;
+
+
+#答案：双重group
+SELECT de.dept_no, dp.dept_name, t.title, COUNT(t.title) AS count
+FROM titles AS t INNER JOIN dept_emp AS de
+ON t.emp_no = de.emp_no AND de.to_date = '9999-01-01' AND t.to_date = '9999-01-01'
+INNER JOIN departments AS dp
+ON de.dept_no = dp.dept_no
+GROUP BY de.dept_no, t.title;
+
+#如何删除重复行？
+#27、给出每个员工每年薪水涨幅超过5000的员工编号emp_no、薪水变更开始日期from_date
+#以及薪水涨幅值salary_growth，并按照salary_growth逆序排列。
+
+#每个员工每年的薪水涨幅?
+select s2.emp_no,s2.from_date,(s2.salary - s1.salary) as salary_growth
+from salaries as s1,salaries as s2
+where s1. emp_no = s2.emp_no
+and (year(s2.to_date) - year(s1.to_date) = 1
+or year(s2.from_date) - year(s1.from_date) = 1 )
+and (s2.salary - s1.salary)  > 5000	
+ORDER BY salary_growth DESC;
+#28、查找描述信息中包括robot的电影对应的分类名称以及电影数目，而且还需要该分类对应电影数量>=5部
+#考察like通配符
+select ca.name,count(canum.film_id) as num
+from film_category as fc inner join film as fi
+on fi.film_id = fc.film_id
+inner join category as ca
+on ca.category_id = fc.category_id
+inner join (select *,count(film_id) as numc
+from film_category
+group by category_id
+having numc >= 5) as canum
+on canum.category_id = fc.category_id 
+where fi.description like '%robot%';
+
+#29、使用join查询方式找出没有分类的电影id以及名称
+select film.film_id ,film.title
+from film left outer join film_category
+on film.film_id = film_category.film_id
+where film_category.category_id is null;
+
+#30、使用子查询的方式找出属于Action分类的所有电影对应的title,description
+select fi.title,fi.description
+from category as ca inner join film_category as fc 
+on fc.category_id = ca.category_id
+inner join film as fi
+on fi.film_id = fc.film_id
+where ca.name = 'Action';
+
+#31、获取select * from employees对应的执行计划
+explain select * from employees;
+
+#32、将employees表的所有员工的last_name和first_name拼接起来作为Name，中间以一个空格区分
+#考察concat
+select emp_no,Concat(first_name,' ',last_name) as name
+from employees;
+# sqlite:SELECT last_name||" "||first_name AS Name FROM employees
+
+#create，insert
+#33、创建一个actor表，包含如下列信息
+create table actor
+(actor_id smallint(5) not null,
+first_name varchar(45) not null,
+last_name varchar(45) not null,
+last_update timestamp not null default ( LOCALTIMESTAMP()),
+primary key (actor_id));
+
+#获取当前日期和时间
+SELECT CURRENT_TIMESTAMP();
+select LOCALTIMESTAMP();
+SELECT NOW();
+SELECT SYSDATE();
+#当前日期
+SELECT CURRENT_DATE();
+SELECT CURDATE();
+
+#当前时间
+SELECT CURRENT_TIME();
+SELECT CURTIME();
+
+#34、对于表actor批量插入如下数据
+INSERT INTO actor(actor_id ,
+first_name,
+last_name,
+last_update)
+values(1,'PENELOPE','GUINESS','2006-02-15 12:34:33'),
+(2,'NICK','WAHLBERG','2006-02-15 12:34:33');
+
+#35、对于表actor批量插入如下数据,如果数据已经存在，请忽略，不使用replace操作
+INSERT IGNORE INTO actor(actor_id ,
+first_name,
+last_name,
+last_update)
+values(3,'ED','CHASE','2006-02-15 12:34:33');
+#replace 怎么用？
+#replace:REPLACE(str,from_str,to_str);
+#https://blog.csdn.net/zhangjg_blog/article/details/23267761
+REPLACE INTO actor VALUES (3,'ED','CHASE','2006-02-15 12:34:33');
+
+Create table actor_name(
+first_name varchar(45) not null,
+last_name varchar(45) not null);
+INSERT INTO actor_name
+select first_name,last_name from actor;
+
+create table actor_name2
+select first_name,last_name from actor;
+
+
+#索引、视图
+#36、索引
+use test;
+CREATE TABLE IF NOT EXISTS actor (
+actor_id smallint(5) NOT NULL PRIMARY KEY,
+first_name varchar(45) NOT NULL,
+last_name varchar(45) NOT NULL,
+last_update timestamp NOT NULL);
+
+ SHOW INDEX FROM actor;
+ #36、对first_name创建唯一索引uniq_idx_firstname，对last_name创建普通索引idx_lastname
+ 
+ create unique index uniq_idx_firstname on actor(first_name);
+ create index idx_lastname on actor(last_name);
+
+ALTER table actor ADD INDEX idx_lastname(last_name);
+ALTER table actor ADD UNIQUE uniq_idx_firstname(first_name);
+
+#37、针对salaries表emp_no字段创建索引idx_emp_no，查询emp_no为10005, 使用强制索引。
+show index from salaries;
+ALTER table salaries ADD INDEX idx_emp_no(emp_no);
+#sqlite: SELECT * FROM salaries INDEXED BY idx_emp_no WHERE emp_no = 10005;
+#mysql 强制索引
+ SELECT * FROM salaries FORCE INDEX (idx_emp_no) WHERE emp_no = '10005';
+ 
+#38、视图：针对actor表创建视图actor_name_view，只包含first_name以及last_name两列，
+#并对这两列重新命名，first_name为first_name_v，last_name修改为last_name_v：
+create view  actor_name_view as
+select first_name as first_name_v,last_name as last_name_v
+from actor;
+drop view actor_name_view;
+create view actor_name_view (first_name_v,last_name_v) as
+select first_name,last_name from actor;
+
+create or replace view actor_name_view (first_name_v,last_name_v) as
+select first_name,last_name from actor;
+
+select  * from  actor_name_view;
+
+#39、现在在last_update后面新增加一列名字为create_date, 类型为datetime, NOT NULL，默认值为'0000 00:00:00'
+ALTER TABLE actor
+ADD create_date datetime not null DEFAULT('0000 00:00:00');
+
+#40、触发器：构造一个触发器audit_log，在向employees_test表中插入一条数据的时候，触发插入相关的数据到audit中。
+create trigger audit_log after insert on employees_test
+for each row  insert into audit values (new.ID, new.name);
+
+# sqlite: CREATE TRIGGER audit_log AFTER INSERT ON employees_test
+#BEGIN
+ #  INSERT INTO AUDIT(EMP_no,name) VALUES (new.ID, new.name);
+#END;
+
+#删除
+use test;
+#41、（*******）删除emp_no重复的记录，只保留最小的id对应的记录。
+#先找出重复行
+select t1.*
+from titles_test as t1,titles_test as t2
+where t1.emp_no = t2.emp_no
+and t1.title = t2.title 
+and t1.from_date = t2.from_date
+and t1.to_date = t2.to_date;
+
+select min(t1.id),t1.emp_no
+from titles_test as t1,titles_test as t2
+where t1.emp_no = t2.emp_no
+and t1.title = t2.title 
+and t1.from_date = t2.from_date
+and t1.to_date = t2.to_date
+group by t1.emp_no;
+
+select id 
+from titles_test 
+where id in (select t1.id
+from titles_test as t1,titles_test as t2
+where t1.emp_no = t2.emp_no
+and t1.title = t2.title 
+and t1.from_date = t2.from_date
+and t1.to_date = t2.to_date)
+and id not in (select min(t1.id)
+from titles_test as t1,titles_test as t2
+where t1.emp_no = t2.emp_no
+and t1.title = t2.title 
+and t1.from_date = t2.from_date
+and t1.to_date = t2.to_date
+group by t1.emp_no);
+
+delete from  titles_test 
+where id in (select * from(select id 
+from titles_test 
+where id in (select t1.id 
+from titles_test as t1,titles_test as t2 
+where t1.emp_no = t2.emp_no 
+and t1.title = t2.title  
+and t1.from_date = t2.from_date 
+and t1.to_date = t2.to_date) 
+and id not in (select min(t1.id) 
+from titles_test as t1,titles_test as t2 
+where t1.emp_no = t2.emp_no 
+and t1.title = t2.title  
+and t1.from_date = t2.from_date 
+and t1.to_date = t2.to_date 
+group by t1.emp_no))as a) ; 
+
+#answer: 运行不出？？？？？？？Error Code:  You can't specify target table 'titles_test' for update in FROM clause
+delete from titles_test 
+where id not in (select min(id) 
+from titles_test 
+group by emp_no);
+
+delete  from titles_test
+where id = 6;
+#Error Code:You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column.  To disable safe mode, toggle the option in Preferences -> SQL Editor and reconnect.
+DELETE FROM titles_test 
+WHERE id NOT IN (
+    SELECT * 
+    FROM(
+        SELECT MIN(id) 
+        FROM titles_test 
+        GROUP BY emp_no
+) AS a);
+create view mt as SELECT MIN(id) 
+        FROM titles_test 
+        GROUP BY emp_no;
+delete from titles_test 
+where id not in (select id from mt);
+
+select t1.id,t1.emp_no
+from titles_test as t1,titles_test as t2
+where t1.emp_no = t2.emp_no;
+
+select min(id) 
+from titles_test
+group by emp_no;
+#更新
+#42、将所有to_date为9999-01-01的全部更新为NULL,且 from_date更新为2001-01-01
+UPDATE titles_test
+set to_date = null ,
+    from_date = '2001-01-01'
+where to_date = '9999-01-01';
+
+#43、将id=5以及emp_no=10001的行数据替换成id=5以及emp_no=10005,其他数据保持不变，使用replace实现。
+#replace:REPLACE(str,from_str,to_str);
+#https://blog.csdn.net/zhangjg_blog/article/details/23267761
+INSERT IGNORE INTO titles_test VALUES (5, 10005, 'Senior Engineer', '1986-06-26', '9999-01-01');
+REPLACE INTO titles_test VALUES (5, 10005, 'Senior Engineer', '1986-06-26', '9999-01-01');
+REPLACE INTO titles_test select 5,10005 ,title,from_date,to_date from titles_test 
+                                     where id = 5;
+UPDATE titles_test SET emp_no = REPLACE(emp_no,10001,10005) WHERE id = 5;
+
+#修改表名
+#44、将titles_test表名修改为titles_2017
+rename table titles_test  to titles_2017;
+ALTER TABLE titles_2017 RENAME TO titles_test;
+
+use test;
+#45、在audit表上创建外键约束，其emp_no对应employees_test表的主键id。
+#sqlite
+drop table audit;
+create table audit(
+EMP_no INT NOT NULL,
+create_date datetime NOT NULL,
+foreign key(EMP_no) references employees_test(id));
+
+alter table audit
+add  foreign key(emp_no) references employees_test(id);
+
+#46、存在如下的视图：create view emp_v as select * from employees where emp_no >10005; 
+#如何获取emp_v和employees有相同的数据
+SELECT em.* FROM employees AS em, emp_v AS ev WHERE em.emp_no = ev.emp_no;
+#INTERSECT 求交集：SELECT * FROM employees INTERSECT SELECT * FROM emp_v;
+#自联结?????
+#select * from employees natural join emp_v ；
+create view emp_v as 
+select * from employees where emp_no >10005;
+select * from emp_v;
+
+# 47、将所有获取奖金的员工当前的薪水增加10%。
+select emp_no,salary * 1.1 as salary2
+from salaries
+where emp_no in (select emp_no from emp_bonus)
+and to_date = '9999-01-01';
+
+UPDATE salaries
+set salary = salary*1.1
+where emp_no in (select emp_no from emp_bonus)
+and to_date = '9999-01-01';
+
+# 48、（***）针对库中的所有表生成select count(*)对应的SQL语句
+#创建表+拼接
+SHOW tables ;
+#选出表名
+select table_name from information_schema.tables where table_schema='test' ;
+#answer
+create table test_table as 
+select table_name from information_schema.tables where table_schema='test' ;
+select concat('select count(*) from ',table_name ) as cnts
+from test_table ;
+#answer2:
+select concat('select count(*) from ',table_name ) as cnts
+from (select table_name from information_schema.tables where table_schema='test' ) as hi;
+
+#sqslite: sqlite的系统表sqlite_master
+SELECT name FROM sqlite_master 
+WHERE type=’table’;
+SELECT "select count(*) from " || name || ";" AS cnts
+FROM sqlite_master WHERE type = 'table';
+
+#49、转义（\'）拼接：将employees表中的所有员工的last_name和first_name通过(')连接起来。
+
+select concat(last_name,'\'',first_name) as name
+from employees;
+
+SELECT last_name || '\''|| first_name AS cnts
+FROM employees;
+
+#50、查找字符串'10,A,B' 中逗号','出现的次数cnt。
+#SQLite 中没有直接统计字符串中子串出现次数的函数
+select (length('10,A,B') - length(replace('10,A,B',',','')) ) as cnt;
+#通用：得到子串出现的次数，试想一下子串若不是一个逗号，而是两个逗号，就知道除以子串长度的意义了。
+SELECT (length("10,A,B")-length(replace("10,A,B",",","")))/length(",") AS cnt;
+#char_length（）: 统计的是字符长度，而length()函数统计的是字符串的字节长度
+select char_length('A,10,B')- char_length(replace('10,A,B',',','')) as cnt;
+#insesrt 语句替换：？？？
+select char_length('A,10,B')-char_length(insert((insert('10,A,B',3,1,'')),4,1,''));
+
+#51:（**）获取Employees中的first_name，查询按照first_name最后两个字母，按照升序进行排列
+#LEFT(s,n)	返回字符串 s 的前 n 个字符;
+#MID(s,n,len)	从字符串 s 的 n 位置截取长度为 len 的子字符串，同 SUBSTRING(s,n,len)
+#SUBSTR(s, start, length)	从字符串 s 的 start 位置截取长度为 length 的子字符串
+#SUBSTRING(s, start, length)	从字符串 s 的 start 位置截取长度为 length 的子字符串
+#REVERSE(first_name):颠倒字符串
+#第一个字符的位置为1，而不为0
+#mysql right(s,n):返回字符串 s 的后 n 个字符;
+select first_name from employees order by right(first_name,2) asc;
+#通用：
+select first_name 
+from employees
+order by SUBSTR(first_name , length(first_name)-1, 2);
+#当Y等于负整数-n时，则从倒数第n个字符处截取。
+SELECT first_name FROM employees ORDER BY substr(first_name,-2) ;
+
+#52、（***）按照dept_no进行汇总，属于同一个部门的emp_no按照逗号进行连接，结果给出dept_no以及连接出的结果employees
+#group_concat()
+select dept_no,group_concat(emp_no) from dept_emp group by dept_no;
+select dept_no,group_concat(emp_no,' ') as employees from dept_emp group by dept_no;
+select dept_no,group_concat(emp_no  SEPARATOR ' ,') from dept_emp group by dept_no;
+#考虑重复：
+select dept_no, group_concat(distinct emp_no order by emp_no asc separator ',') as employees
+    from dept_emp group by dept_no;
+    
+#53、查找排除当前最大、最小salary之后的员工的平均工资avg_salary。
+
+select AVG(salary) as avg_salary
+from (select emp_no,salary
+from salaries
+where salary <> (select max(salary)
+from salaries where to_date = '9999-01-01')
+and salary <> (select min(salary)
+from salaries where to_date = '9999-01-01')
+and  to_date = '9999-01-01')  as sa2;
+
+SELECT AVG(salary) AS avg_salary FROM salaries 
+WHERE to_date = '9999-01-01' 
+AND salary NOT IN (SELECT MAX(salary) FROM salaries WHERE to_date = '9999-01-01')
+AND salary NOT IN (SELECT MIN(salary) FROM salaries WHERE to_date = '9999-01-01');
+
+#mysql between ... and 包括两端
+SELECT AVG(b.salary) avg_salary
+FROM (SELECT salary FROM salaries WHERE salary BETWEEN (select min(salary) from salaries) AND (select max(salary) from salaries)) AS b;
+select AVG(salary) as avg_salary
+from salaries;
+select max(salary),min(salary)
+from salaries
+where to_date = '9999-01-01';
+
+#54、(**)分页查询employees表，每5行一页，返回第2页的数据
+select * from employees
+limit 5,5;
+
+#LIMIT page_size OFFSET pade_size* （page_index-1）
+#LIMIT 后的数字代表返回几条记录，OFFSET 后的数字代表从第几条记录开始返回（第一条记录序号为0）
+select * from employees
+LIMIT 5 OFFSET 5;
+
+#55、获取所有员工的emp_no、部门编号dept_no以及对应的bonus类型btype和received ，没有分配具体的员工不显示
+select employees.emp_no,dept_emp.dept_no,emp_bonus.btype,emp_bonus.recevied
+from employees inner join dept_emp on dept_emp.emp_no =  employees.emp_no
+left outer join emp_bonus on employees.emp_no = emp_bonus.emp_no;
+
+#56、(***)使用含有关键字exists查找未分配具体部门的员工的所有信息。
+#in查询的子条件返回结果必须只有一个字段
+select * from employees
+where emp_no not in (select emp_no from dept_emp);
+
+#exists:子查询表大的用exists，子查询表小的用in：  select * from A where exists (select * from B where B.id = A.id);
+select * from employees
+where not exists (select * from dept_emp where dept_emp.emp_no = employees.emp_no);
+select * 
+from employees ;
+use test;
+select * 
+from employees as e 
+where exists ( select * from employees where employees.emp_no not in
+              (select emp_no from dept_emp));
+
+select * from employees where employees.emp_no not in
+              (select emp_no from dept_emp);
+ 
+#57、获取employees中的行数据，且这些行也存在于emp_v中。注意不能使用intersect关键字。
+#创建视图
+drop view emp_v;
+create view emp_v as select * from employees where emp_no >10005;
+
+select employees.* from employees,emp_v
+where employees.emp_no = emp_v.emp_no;
+select * from emp_v;
+
+#58、(***)获取有奖金的员工相关信息。to_date='9999-01-01'
+#case 语句，条件选择： CASE x WHEN w1 THEN r1 WHEN w2 THEN r2 ELSE r3 END
+#给出emp_no、first_name、last_name、奖金类型btype、对应的当前薪水情况salary以及奖金金额bonus。
+# bonus类型btype为1其奖金为薪水salary的10%，btype为2其奖金为薪水的20%，其他类型均为薪水的30%。
+select employees.emp_no,employees.first_name,employees.last_name,emp_bonus.btype,
+salaries.salary,salaries.salary*emp_bonus.btype*0.1 as bonus
+from employees inner join emp_bonus on employees.emp_no = emp_bonus.emp_no
+inner join salaries on employees.emp_no = salaries.emp_no
+where salaries.to_date='9999-01-01';
+
+select e.emp_no,e.first_name,e.last_name,b.btype,s.salary,
+(case b.btype
+when 1 then s.salary*0.1
+when 2 then s.salary*0.2
+else s.salary*0.3 end) as bonus
+from employees e inner join emp_bonus b on e.emp_no=b.emp_no inner join salaries s on
+s.emp_no=e.emp_no and s.to_date = '9999-01-01';
+
+select employees.emp_no,employees.first_name,employees.last_name,emp_bonus.btype,salaries.salary,
+(case emp_bonus.btype
+when 1 then salaries.salary*0.1
+when 2 then salaries.salary*0.1
+else salaries.salary*0.1 end) as bonus
+from employees inner join emp_bonus on employees.emp_no = emp_bonus.emp_no
+inner join salaries on employees.emp_no = salaries.emp_no
+where salaries.to_date='9999-01-01';
+
+#59、按照salary的累计和running_total，其中running_total为前两个员工的salary累计和，其他以此类推。
+select s1.emp_no,s1.salary,(select sum(s2.salary) from salaries as s2 where s2.emp_no <= s1.emp_no and s2.to_date='9999-01-01' order by emp_no)  as running_total 
+from salaries as s1 
+where  s1.to_date='9999-01-01'
+order by emp_no ;
+#识别前一个员工
+
+
+#60、对于employees表中，在对first_name进行排名后(升序排列),给出奇数行的first_name
+select first_name
+from employees e1
+where (select count(*)
+from employees as e2
+where e1.first_name >= e2.first_name) % 2 = 1;
+#某姓名是第几个:
+select e1.first_name,(select count(*)
+from employees as e2
+where e1.first_name >= e2.first_name) as nob
+from employees as e1
+order by  first_name;
+
+
+
+#not safe;but mysql可以
+DELETE FROM titles_test 
+WHERE id NOT IN (
+    SELECT a.id
+    FROM(
+        SELECT MIN(id) as id
+        FROM titles_test 
+        GROUP BY emp_no
+) AS a);
+
+#查找每个员工最近一次发放工资记录
+#select 1
+select a.*
+from salaries as  a
+where not exists (select 1
+from salaries as b
+where b.emp_no=a.emp_no and b.to_date>a.to_date);
+
+select salaries.*
+from salaries 
+where salaries.to_date in (select max(to_date)
+from salaries as s2
+where s2.emp_no = salaries.emp_no
+group by emp_no);
+
+SELECT a.* 
+FROM salaries as a
+INNER JOIN (SELECT emp_no,MAX(to_date) as 'maxgdtime'
+FROM salaries 
+GROUP BY emp_no
+) as b 
+ON a.emp_no = b.emp_no
+AND a.to_date = b.maxgdtime;
+ 
